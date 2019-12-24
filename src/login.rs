@@ -4,7 +4,6 @@ use cursive::Cursive;
 use cursive::direction::Orientation;
 use cursive::event::Event;
 use cursive::traits::*;
-use cursive::view::Selector;
 use cursive::views::{Dialog, EditView, LinearLayout, OnEventView, TextView};
 
 use crate::{api, vault};
@@ -19,10 +18,9 @@ pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
         let email_view =
                 OnEventView::new(email_edit)
                         .on_event(Event::CtrlChar('u'), |siv| {
-                                siv.call_on_id("email", |view: &mut EditView| {
-                                        view.set_content("");
-                                })
-                                .unwrap()
+                                if let Some(mut view) = siv.find_id::<EditView>("email") {
+                                        view.set_content("")(siv);
+                                }
                         });
 
         let password_edit = EditView::new()
@@ -32,10 +30,9 @@ pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
         let password_view =
                 OnEventView::new(password_edit)
                         .on_event(Event::CtrlChar('u'), |siv| {
-                                siv.call_on_id("master_password", |view: &mut EditView| {
-                                        view.set_content("");
-                                })
-                                .unwrap()
+                                if let Some(mut view) = siv.find_id::<EditView>("master_password") {
+                                        view.set_content("")(siv);
+                                }
                         });
 
         let layout = LinearLayout::new(Orientation::Vertical)
@@ -67,7 +64,7 @@ pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
         );
 
         if default_email.is_some() {
-                siv.focus(&Selector::Id("master_password")).unwrap();
+                siv.focus_id("master_password").unwrap();
         }
 }
 

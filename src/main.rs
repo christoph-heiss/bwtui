@@ -25,8 +25,6 @@ fn main() {
         #[cfg(debug_assertions)]
         siv.add_global_callback(Key::F1, |s| s.toggle_debug_console());
 
-        siv.add_global_callback(Key::Esc, |s| s.quit());
-
         let mut email = None;
         if let Ok(data) = api::read_local_vault_data() {
                 email = Some(data.profile.email.clone());
