@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: MIT
 
-use std::cmp;
+use std::cmp::Ordering;
 
 use clipboard::ClipboardProvider;
 use clipboard::ClipboardContext;
 
+use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
+
 use cursive::Cursive;
-use cursive::direction::Orientation;
-use cursive::event::Event;
+use cursive::event::{Event, Key};
 use cursive::traits::*;
-use cursive::views::{Dialog, LinearLayout, OnEventView, TextView};
+use cursive::views::{Dialog, DummyView, EditView, LinearLayout, OnEventView, TextView};
 use cursive_table_view::{TableView, TableViewItem};
 
 use unicase::UniCase;
 
-use crate::api::{self, CipherEntry};
+use crate::api::{AuthData, CipherEntry, VaultData};
 use crate::cipher::CipherSuite;
 
 
@@ -32,6 +33,9 @@ struct VaultEntry {
         password: String,
         favorite: String,
 }
+
+type VaultTableView = TableView::<VaultEntry, VaultColumn>;
+
 
 impl VaultEntry {
         fn from_cipher_entry(entry: &CipherEntry, cipher: &CipherSuite) -> Option<VaultEntry> {
@@ -55,7 +59,7 @@ impl TableViewItem<VaultColumn> for VaultEntry {
                 }
         }
 
-        fn cmp(&self, other: &Self, column: VaultColumn) -> cmp::Ordering
+        fn cmp(&self, other: &Self, column: VaultColumn) -> Ordering
                 where Self: Sized,
         {
                 match column {
@@ -66,29 +70,26 @@ impl TableViewItem<VaultColumn> for VaultEntry {
         }
 }
 
-type VaultTableView = TableView::<VaultEntry, VaultColumn>;
 
-
-pub fn show(siv: &mut Cursive, auth_data: api::AuthData, vault_data: api::VaultData) {
+pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
         let items = vault_data.ciphers
                 .iter()
                 .map(|c| VaultEntry::from_cipher_entry(&c, &auth_data.cipher).unwrap())
-                .collect();
-
+                .collect::<Vec<VaultEntry>>();
 
         let mut table = VaultTableView::new()
                 .column(VaultColumn::Favorite, "", |c| c.width(1))
                 .column(VaultColumn::Name, "Name", |c| c.width_percent(25))
                 .column(VaultColumn::Username, "Username", |c| c)
-                .items(items);
+                .items(items.clone());
 
-        table.sort_by(VaultColumn::Name, cmp::Ordering::Less);
-        table.sort_by(VaultColumn::Favorite, cmp::Ordering::Less);
+        table.sort_by(VaultColumn::Name, Ordering::Less);
+        table.sort_by(VaultColumn::Favorite, Ordering::Less);
 
-        let view = OnEventView::new(
+        let table_view = OnEventView::new(
                         table
                                 .with_id("password_table")
-                                .min_size((100, 50))
+                                .full_screen()
                 )
                 .on_event('j', |siv| {
                         siv.call_on_id("password_table", |view: &mut VaultTableView| {
@@ -98,7 +99,7 @@ pub fn show(siv: &mut Cursive, auth_data: api::AuthData, vault_data: api::VaultD
                                         }
                                 }
                         })
-                        .unwrap()
+                        .unwrap();
                 })
                 .on_event('k', |siv| {
                         siv.call_on_id("password_table", |view: &mut VaultTableView| {
@@ -108,7 +109,7 @@ pub fn show(siv: &mut Cursive, auth_data: api::AuthData, vault_data: api::VaultD
                                         }
                                 }
                         })
-                        .unwrap()
+                        .unwrap();
                 })
                 .on_event(Event::CtrlChar('u'), |siv| {
                         siv.call_on_id("password_table", |view: &mut VaultTableView| {
@@ -123,7 +124,7 @@ pub fn show(siv: &mut Cursive, auth_data: api::AuthData, vault_data: api::VaultD
                                         }
                                 }
                         })
-                        .unwrap()
+                        .unwrap();
                 })
                 .on_event(Event::CtrlChar('p'), |siv| {
                         siv.call_on_id("password_table", |view: &mut VaultTableView| {
@@ -138,17 +139,93 @@ pub fn show(siv: &mut Cursive, auth_data: api::AuthData, vault_data: api::VaultD
                                         }
                                 }
                         })
-                        .unwrap()
+                        .unwrap();
+                })
+                .on_event(Event::CtrlChar('f'), |siv| {
+                        siv.focus_id("search_field").unwrap();
                 });
 
-        let layout = LinearLayout::new(Orientation::Vertical)
+        let search_field =
+                EditView::new()
+                        .on_edit(move |siv, content, _| {
+                                fuzzy_match_on_edit(siv, &items, content);
+                        })
+                        .with_id("search_field")
+                        .full_width();
+
+        let search_view = LinearLayout::horizontal()
+                .child(TextView::new("search: "))
                 .child(
-                        Dialog::around(view)
+                        OnEventView::new(search_field)
+                                .on_event(Event::CtrlChar('f'), |siv| {
+                                        siv.focus_id("password_table").unwrap();
+                                })
+                                .on_event(Key::Esc, |siv| {
+                                        siv.focus_id("password_table").unwrap();
+                                })
+                                .on_event(Key::Enter, |siv| {
+                                        siv.focus_id("password_table").unwrap();
+                                })
+                                .on_event(Event::CtrlChar('u'), |siv| {
+                                        if let Some(mut view) = siv.find_id::<EditView>("search_field") {
+                                                view.set_content("")(siv);
+                                        }
+                                })
+                );
+
+        let main_view = LinearLayout::vertical()
+                .child(search_view)
+                .child(DummyView)
+                .child(table_view);
+
+        let layout = LinearLayout::vertical()
+                .child(
+                        Dialog::around(main_view)
                                 .title("bitwarden vault")
+                                .padding_top(1)
                 )
                 .child(
-                        TextView::new("^U: Copy username  ^P: Copy password")
+                        LinearLayout::horizontal()
+                                .child(TextView::new("^U: Copy username  ^P: Copy password").full_width())
+                                .child(TextView::new("^F: fuzzy-search"))
                 );
 
         siv.add_layer(layout);
+        siv.focus_id("password_table").unwrap();
+}
+
+
+fn fuzzy_match_on_edit(siv: &mut Cursive, items: &Vec<VaultEntry>, content: &str) {
+        let mut table = siv.find_id::<VaultTableView>("password_table").unwrap();
+
+        // If no search term is present, sort by name and favorite by default
+        if content.len() == 0 {
+                table.set_items(items.clone());
+
+                table.sort_by(VaultColumn::Name, Ordering::Less);
+                table.sort_by(VaultColumn::Favorite, Ordering::Less);
+
+                return;
+        }
+
+        let matcher = SkimMatcherV2::default();
+
+        let mut items: Vec<(i64, VaultEntry)> = items
+                .iter()
+                .map(|entry| {
+                        (matcher.fuzzy_match(&entry.name, content), entry.clone())
+                })
+                .filter(|(score, _)| score.is_some())
+                .map(|(score, entry)| (score.unwrap(), entry))
+                .collect();
+
+        items.sort_by(|a, b| a.0.cmp(&b.0).reverse());
+
+        let items = items
+                .iter()
+                .map(|(_, entry)| entry.clone())
+                .collect();
+
+        table.set_selected_row(0);
+        table.set_items(items);
 }
