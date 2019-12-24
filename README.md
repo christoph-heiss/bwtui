@@ -25,6 +25,7 @@ cargo install bwtui
 
 `bwtui` still got lots of rough edges:
 
+- [ ] offline support / reuse of access token
 - [ ] better error handling/propagating
 - [ ] configurable shortcuts
 - [ ] (optional) clipboard clearing after x seconds
@@ -38,3 +39,13 @@ cargo install bwtui
 - [ ] support for on-premise servers
 - [ ] check some of the crypto stuff (especially hmac stuff)
 - [ ] (maybe) editing of vault items
+
+## License
+
+Licensed under MIT license ([LICENSE](LICENSE) or http://opensource.org/licenses/MIT).
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you shall be licensed by MIT license as above, without any
+additional terms or conditions.
