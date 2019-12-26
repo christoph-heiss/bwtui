@@ -111,6 +111,18 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
                         })
                         .unwrap();
                 })
+                .on_event('J', |siv| {
+                        siv.call_on_id("password_table", |view: &mut VaultTableView| {
+                                view.set_selected_row(view.len() - 1);
+                        })
+                        .unwrap();
+                })
+                .on_event('K', |siv| {
+                        siv.call_on_id("password_table", |view: &mut VaultTableView| {
+                                view.set_selected_row(0);
+                        })
+                        .unwrap();
+                })
                 .on_event(Event::CtrlChar('u'), |siv| {
                         siv.call_on_id("password_table", |view: &mut VaultTableView| {
                                 if let Some(row) = view.item() {
