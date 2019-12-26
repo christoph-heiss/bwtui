@@ -5,9 +5,9 @@ Small and simple TUI (terminal user interface) for your bitwarden vault.
 Currently only supports reading/copying usernames and passwords for items.
 
 ## Controls
-- general: `<esc>` or `ctrl-c` to exit
+- general: `ctrl-c` to exit
 - login: `<tab>` to move between email, password and ok button
-- vault: `j/k` move up/down, `ctrl-u` copy username, `ctrl-p` copy password
+- vault: `j/k` move up/down, `J/K` to move to first/last item, `ctrl-u` copy username, `ctrl-p` copy password, `ctrl-f` fuzzy search
 
 ## Installation
 
@@ -25,12 +25,12 @@ cargo install bwtui
 
 `bwtui` still got lots of rough edges:
 
-- [ ] offline support / reuse of access token
+- [x] ~~offline support~~
 - [ ] better error handling/propagating
 - [ ] configurable shortcuts
 - [ ] (optional) clipboard clearing after x seconds
 - [ ] (optional) vault locking after x seconds
-- [ ] re-sync with bitwarden server
+- [ ] re-sync with bitwarden server / reuse of access token
 - [ ] domain list support
 - [ ] login URI launching
 - [ ] card/identity/note support
@@ -42,7 +42,7 @@ cargo install bwtui
 
 ## License
 
-Licensed under MIT license ([LICENSE](LICENSE) or http://opensource.org/licenses/MIT).
+Licensed under MIT license ([LICENSE](LICENSE) or https://opensource.org/licenses/MIT).
 
 ### Contribution
 
