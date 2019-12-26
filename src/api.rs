@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 
 use crate::cipher::{CipherSuite, CipherString};
 
@@ -42,11 +43,16 @@ pub enum ApiError {
         },
 }
 
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AuthData {
         access_token: String,
         expires_in: usize,
         token_type: String,
 
+        kdf: usize,
+        pub kdf_iterations: usize,
+
+        #[serde(skip)]
         pub cipher: CipherSuite,
 }
 
@@ -225,6 +231,13 @@ pub struct VaultData {
         domains: Option<Domains>,
 }
 
+#[derive(Debug)]
+pub struct AppData {
+        pub auth: AuthData,
+        pub vault: VaultData,
+}
+
+
 fn perform_prelogin(client: &reqwest::Client, email: &str) -> Result<PreloginResponseData, ApiError> {
         let url = format!("{}/accounts/prelogin", BASE_URL);
 
@@ -286,7 +299,7 @@ pub fn authenticate(email: &str, password: &str) -> Result<AuthData, ApiError> {
         let PreloginResponseData { kdf, kdf_iterations } =
                 perform_prelogin(&client, email)?;
 
-        let cipher = CipherSuite::from(email, password, kdf, kdf_iterations);
+        let cipher = CipherSuite::from(email, password, kdf_iterations);
 
         let LoginResponseData { access_token, expires_in, token_type } =
                 perform_token_auth(&client, email, &cipher)?;
@@ -295,6 +308,8 @@ pub fn authenticate(email: &str, password: &str) -> Result<AuthData, ApiError> {
                 access_token,
                 expires_in,
                 token_type,
+                kdf,
+                kdf_iterations,
                 cipher,
         })
 }
@@ -336,7 +351,7 @@ pub fn sync(auth_data: &AuthData) -> Result<VaultData, ApiError> {
 }
 
 
-fn get_vault_data_path() -> Result<PathBuf, String> {
+fn get_app_data_path() -> Result<PathBuf, String> {
         let project_dirs = directories::ProjectDirs::from("", "", "bwtui")
                 .ok_or("could not retrieve data directory path")?;
 
@@ -347,28 +362,33 @@ fn get_vault_data_path() -> Result<PathBuf, String> {
 
         let mut path = PathBuf::new();
         path.push(target_dir);
-        path.push("data.json");
 
         Ok(path)
 }
 
 
-pub fn save_vault_data(vault_data: &VaultData) -> Result<(), ApiError> {
-        let path = get_vault_data_path()
+fn save_data_to<T>(filename: &str, data: &T) -> Result<(), ApiError>
+        where T: Serialize
+{
+        let mut path = get_app_data_path()
                 .map_err(|error| ApiError::VaultDataWriteFailed { error })?;
+        path.push(filename);
 
         let file = File::create(path)
                 .map_err(|e| ApiError::VaultDataWriteFailed { error: e.to_string() })?;
 
         let writer = BufWriter::new(file);
-        serde_json::to_writer(writer, vault_data)
+        serde_json::to_writer(writer, data)
                 .map_err(|e| ApiError::VaultDataWriteFailed { error: e.to_string() })
 }
 
 
-pub fn read_local_vault_data() -> Result<VaultData, ApiError> {
-        let path = get_vault_data_path()
+fn read_data_from<T>(filename: &str) -> Result<T, ApiError>
+        where T: DeserializeOwned
+{
+        let mut path = get_app_data_path()
                 .map_err(|error| ApiError::VaultDataReadFailed { error })?;
+        path.push(filename);
 
         let file = File::open(path)
                 .map_err(|e| ApiError::VaultDataReadFailed { error: e.to_string() })?;
@@ -378,3 +398,21 @@ pub fn read_local_vault_data() -> Result<VaultData, ApiError> {
                 .map_err(|e| ApiError::VaultDataReadFailed { error: e.to_string() })
 }
 
+
+pub fn read_app_data() -> Result<AppData, ApiError> {
+        let auth = read_data_from("auth.json")?;
+        let vault = read_data_from("vault.json")?;
+
+        Ok(AppData {
+                auth,
+                vault,
+        })
+}
+
+
+pub fn save_app_data(auth: &AuthData, vault: &VaultData) -> Result<(), ApiError> {
+        save_data_to("auth.json", auth)?;
+        save_data_to("vault.json", vault)?;
+
+        Ok(())
+}

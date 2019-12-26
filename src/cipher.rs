@@ -12,10 +12,8 @@ use serde::de::Visitor;
 use sha2::Sha256;
 
 
+#[derive(Debug, Default)]
 pub struct CipherSuite {
-        kdf: usize,
-        kdf_iterations: usize,
-
         master_key: Vec<u8>,
         pub master_key_hash: String,
         mac_key: Vec<u8>,
@@ -23,14 +21,30 @@ pub struct CipherSuite {
         decrypt_key: Option<Vec<u8>>,
 }
 
+#[derive(Debug, failure::Fail)]
+pub enum CipherError {
+        #[fail(display = "failed to verify key")]
+        InvalidMac,
+
+        #[fail(display = "only type 2 ciphers are supported")]
+        InvalidKeyType,
+
+        #[fail(display = "key length must  be exactly 32 bytes")]
+        InvalidKeyLength,
+
+        #[fail(display = "block mode error")]
+        BlockModeError,
+
+        #[fail(display = "failed to set decrypt key: {:?}", 0)]
+        DecryptionKeyError(String),
+}
+
 impl CipherSuite {
-        pub fn from(email: &str, password: &str, kdf: usize, kdf_iterations: usize) -> Self {
+        pub fn from(email: &str, password: &str, kdf_iterations: usize) -> Self {
                 let (master_key, master_key_hash, mac_key) =
                         derive_master_key(email, password, kdf_iterations);
 
                 Self {
-                        kdf,
-                        kdf_iterations,
                         master_key,
                         master_key_hash,
                         mac_key,
@@ -38,11 +52,14 @@ impl CipherSuite {
                 }
         }
 
-        pub fn set_decrypt_key(&mut self, key: &CipherString) {
-                let key = key.decrypt_raw(&self.master_key, &self.mac_key).unwrap();
+        pub fn set_decrypt_key(&mut self, key: &CipherString) -> Result<(), CipherError> {
+                let key = key.decrypt_raw(&self.master_key, &self.mac_key)
+                        .map_err(|e| CipherError::DecryptionKeyError(e.to_string()))?;
 
                 self.decrypt_key = Some(Vec::from(&key[0..32]));
                 self.mac_key = Vec::from(&key[32..64]);
+
+                Ok(())
         }
 }
 
@@ -103,6 +120,10 @@ impl CipherString {
         }
 
         fn is_valid_mac(&self, mac_key: &[u8]) -> bool {
+                if mac_key.len() != 32 {
+                        return false;
+                }
+
                 let mut message = Vec::<u8>::new();
                 message.extend(&self.iv);
                 message.extend(&self.ct);
@@ -113,22 +134,27 @@ impl CipherString {
                 mac.verify(&self.mac).is_ok()
         }
 
-        pub fn decrypt_raw(&self, key: &[u8], mac: &[u8]) -> Option<Vec<u8>> {
-                assert!(self.type_ == 2 && key.len() == 32 && mac.len() == 32);
+        pub fn decrypt_raw(&self, key: &[u8], mac: &[u8]) -> Result<Vec<u8>, CipherError> {
+                if self.type_ != 2 {
+                        return Err(CipherError::InvalidKeyType);
+                }
 
                 if !self.is_valid_mac(mac) {
-                        return None;
+                        return Err(CipherError::InvalidMac);
                 }
 
                 // Currently only one cipher (type 2) is supported/used by bitwarden:
                 //   pbkdf2/aes-cbc-256/hmac-sha256
-                let cipher = Cbc::<Aes256, Pkcs7>::new_var(key, &self.iv).ok()?;
 
-                cipher.decrypt_vec(&self.ct).ok()
+                Cbc::<Aes256, Pkcs7>::new_var(key, &self.iv)
+                        .map_err(|_| CipherError::InvalidKeyLength)?
+                        .decrypt_vec(&self.ct)
+                        .map_err(|_| CipherError::BlockModeError)
         }
 
         pub fn decrypt(&self, cipher: &CipherSuite) -> Option<String> {
                 self.decrypt_raw(cipher.decrypt_key.as_ref()?, &cipher.mac_key)
+                        .ok()
                         .and_then(|s| String::from_utf8(s).ok())
         }
 }

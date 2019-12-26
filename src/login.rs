@@ -6,8 +6,9 @@ use cursive::event::Event;
 use cursive::traits::*;
 use cursive::views::{Dialog, EditView, LinearLayout, OnEventView, TextView};
 
-use crate::{api, vault};
-use api::{ApiError, AuthData, VaultData};
+use crate::api::{self, ApiError, AppData, AuthData, VaultData};
+use crate::cipher::CipherSuite;
+use crate::vault;
 
 
 pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
@@ -70,21 +71,33 @@ pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
 
 
 fn check_master_password(siv: &mut Cursive, email: String, master_password: &str) {
+        if let Some(app_data) = siv.take_user_data::<AppData>() {
+                let AppData { mut auth, vault } = app_data;
+
+                auth.cipher = CipherSuite::from(&email, master_password, auth.kdf_iterations);
+
+                if let Err(_) = auth.cipher.set_decrypt_key(&vault.profile.key) {
+                        siv.add_layer(Dialog::info("Wrong vault password"));
+                } else {
+                        vault::show(siv, auth, vault);
+                }
+
+                return;
+        }
+
         let auth_data = api::authenticate(&email, &master_password);
 
         match auth_data {
                 Ok(mut auth_data) => {
                         siv.pop_layer();
 
-                        let vault_data =
-                                if let Some(vault_data) = siv.take_user_data::<VaultData>() {
-                                        vault_data
-                                } else {
-                                        sync_vault_data(siv, &auth_data).unwrap()
-                                };
+                        let vault = sync_vault_data(siv, &auth_data).unwrap();
 
-                        auth_data.cipher.set_decrypt_key(&vault_data.profile.key);
-                        vault::show(siv, auth_data, vault_data);
+                        if let Err(_) = auth_data.cipher.set_decrypt_key(&vault.profile.key) {
+                                siv.add_layer(Dialog::info("Wrong vault password"));
+                        } else {
+                                vault::show(siv, auth_data, vault);
+                        }
                 },
                 Err(_) => {
                         siv.add_layer(Dialog::info("Wrong vault password"))
@@ -96,7 +109,7 @@ fn check_master_password(siv: &mut Cursive, email: String, master_password: &str
 fn sync_vault_data(siv: &mut Cursive, auth_data: &AuthData) -> Result<VaultData, ApiError> {
         match api::sync(&auth_data) {
                 Ok(vault_data) => {
-                        if let Err(err) = api::save_vault_data(&vault_data) {
+                        if let Err(err) = api::save_app_data(&auth_data, &vault_data) {
                                 siv.add_layer(Dialog::info(err.to_string()));
                         }
 
