@@ -2,7 +2,6 @@
 
 use cursive::backend::termion::Backend;
 use cursive::Cursive;
-use cursive::event::Key;
 use cursive_buffered_backend::BufferedBackend;
 
 mod api;
@@ -19,11 +18,6 @@ fn main() {
 
                 Box::new(buffered)
         });
-
-        #[cfg(debug_assertions)]
-        cursive::logger::init();
-        #[cfg(debug_assertions)]
-        siv.add_global_callback(Key::F1, |s| s.toggle_debug_console());
 
         let mut email = None;
         if let Ok(data) = api::read_local_vault_data() {
