@@ -238,13 +238,13 @@ pub struct AppData {
 }
 
 
-fn perform_prelogin(client: &reqwest::Client, email: &str) -> Result<PreloginResponseData, ApiError> {
+fn perform_prelogin(client: &reqwest::blocking::Client, email: &str) -> Result<PreloginResponseData, ApiError> {
         let url = format!("{}/accounts/prelogin", BASE_URL);
 
         let mut data = HashMap::new();
         data.insert("email", email);
 
-        let mut response = client.post(&url)
+        let response = client.post(&url)
                 .json(&data)
                 .send()
                 .map_err(|e| ApiError::PreloginFailed { error: e.to_string() })?;
@@ -261,7 +261,7 @@ fn perform_prelogin(client: &reqwest::Client, email: &str) -> Result<PreloginRes
 }
 
 
-fn perform_token_auth(client: &reqwest::Client, email: &str, cipher: &CipherSuite)
+fn perform_token_auth(client: &reqwest::blocking::Client, email: &str, cipher: &CipherSuite)
         -> Result<LoginResponseData, ApiError>
 {
         let device_id = Uuid::new_v4().to_hyphenated().to_string();
@@ -276,7 +276,7 @@ fn perform_token_auth(client: &reqwest::Client, email: &str, cipher: &CipherSuit
         data.insert("deviceName", "bwtui");
         data.insert("password", &cipher.master_key_hash);
 
-        let mut response = client.post(AUTH_URL)
+        let response = client.post(AUTH_URL)
                 .form(&data)
                 .send()
                 .map_err(|e| ApiError::LoginFailed { error: e.to_string() })?;
@@ -294,7 +294,7 @@ fn perform_token_auth(client: &reqwest::Client, email: &str, cipher: &CipherSuit
 
 
 pub fn authenticate(email: &str, password: &str) -> Result<AuthData, ApiError> {
-        let client = reqwest::Client::new();
+        let client = reqwest::blocking::Client::new();
 
         let PreloginResponseData { kdf, kdf_iterations } =
                 perform_prelogin(&client, email)?;
@@ -327,12 +327,12 @@ pub fn sync(auth_data: &AuthData) -> Result<VaultData, ApiError> {
         let auth_header = format!("{} {}", auth_data.token_type, auth_data.access_token);
         headers.insert(header::AUTHORIZATION, HeaderValue::from_str(&auth_header).unwrap());
 
-        let client = reqwest::Client::builder()
+        let client = reqwest::blocking::Client::builder()
                 .default_headers(headers)
                 .build()
                 .map_err(map_reqwest_err)?;
 
-        let mut response = client.get(&url)
+        let response = client.get(&url)
                 .send()
                 .map_err(map_reqwest_err)?;
 
@@ -403,10 +403,7 @@ pub fn read_app_data() -> Result<AppData, ApiError> {
         let auth = read_data_from("auth.json")?;
         let vault = read_data_from("vault.json")?;
 
-        Ok(AppData {
-                auth,
-                vault,
-        })
+        Ok(AppData { auth, vault })
 }
 
 

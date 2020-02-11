@@ -14,24 +14,24 @@ use crate::vault;
 pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
         let email_edit = EditView::new()
                 .content(default_email.clone().unwrap_or("".to_owned()))
-                .with_id("email");
+                .with_name("email");
 
         let email_view =
                 OnEventView::new(email_edit)
                         .on_event(Event::CtrlChar('u'), |siv| {
-                                if let Some(mut view) = siv.find_id::<EditView>("email") {
+                                if let Some(mut view) = siv.find_name::<EditView>("email") {
                                         view.set_content("")(siv);
                                 }
                         });
 
         let password_edit = EditView::new()
                 .secret()
-                .with_id("master_password");
+                .with_name("master_password");
 
         let password_view =
                 OnEventView::new(password_edit)
                         .on_event(Event::CtrlChar('u'), |siv| {
-                                if let Some(mut view) = siv.find_id::<EditView>("master_password") {
+                                if let Some(mut view) = siv.find_name::<EditView>("master_password") {
                                         view.set_content("")(siv);
                                 }
                         });
@@ -47,14 +47,14 @@ pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
                         .title("bitwarden vault login")
                         .button("Ok", |siv| {
                                 let email = siv
-                                        .call_on_id("email", |view: &mut EditView| {
+                                        .call_on_name("email", |view: &mut EditView| {
                                                 view.get_content()
                                         })
                                         .unwrap()
                                         .to_string();
 
                                 let password = siv
-                                        .call_on_id("master_password", |view: &mut EditView| {
+                                        .call_on_name("master_password", |view: &mut EditView| {
                                                 view.get_content()
                                         })
                                         .unwrap();
@@ -65,7 +65,7 @@ pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
         );
 
         if default_email.is_some() {
-                siv.focus_id("master_password").unwrap();
+                siv.focus_name("master_password").unwrap();
         }
 }
 

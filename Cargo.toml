@@ -11,33 +11,36 @@ description = "terminal-based vault browser for bitwarden"
 
 [dependencies]
 aes = "0.3.2"
-base64 = "0.11.0"
+base64 = "0.12.0"
 block-modes = "0.3.3"
 clipboard = "0.5.0"
 cursive_buffered_backend = "0.3.1"
-cursive_table_view = "0.10.0"
+cursive_table_view = "0.12.0"
 directories = "2.0.2"
-failure = "0.1.6"
-fuzzy-matcher = "0.3.1"
+failure = "0.1.7"
+fuzzy-matcher = "0.3.4"
 hkdf = "0.8.0"
 hmac = "0.7.1"
 pbkdf2 = "0.3.0"
-reqwest = "0.9.24"
-serde_json = "1.0.44"
-sha2 = "0.8.0"
+serde_json = "1.0.51"
+sha2 = "0.8.1"
 unicase = "2.6.0"
 
 [dependencies.chrono]
-version = "0.4.10"
+version = "0.4.11"
 features = ["serde"]
 
 [dependencies.cursive]
-version = "0.12.0"
+version = "0.14.0"
 default-features = false
 features = ["termion-backend"]
 
+[dependencies.reqwest]
+version = "0.10.4"
+features = ["blocking", "json"]
+
 [dependencies.serde]
-version = "1.0.104"
+version = "1.0.106"
 features = ["derive"]
 
 [dependencies.uuid]

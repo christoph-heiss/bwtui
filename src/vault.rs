@@ -88,11 +88,11 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
 
         let table_view = OnEventView::new(
                         table
-                                .with_id("password_table")
+                                .with_name("password_table")
                                 .full_screen()
                 )
                 .on_event('j', |siv| {
-                        siv.call_on_id("password_table", |view: &mut VaultTableView| {
+                        siv.call_on_name("password_table", |view: &mut VaultTableView| {
                                 if let Some(row) = view.row() {
                                         if row < view.len()-1 {
                                                 view.set_selected_row(row + 1);
@@ -102,7 +102,7 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
                         .unwrap();
                 })
                 .on_event('k', |siv| {
-                        siv.call_on_id("password_table", |view: &mut VaultTableView| {
+                        siv.call_on_name("password_table", |view: &mut VaultTableView| {
                                 if let Some(row) = view.row() {
                                         if row > 0 {
                                                 view.set_selected_row(row - 1);
@@ -112,19 +112,19 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
                         .unwrap();
                 })
                 .on_event('J', |siv| {
-                        siv.call_on_id("password_table", |view: &mut VaultTableView| {
+                        siv.call_on_name("password_table", |view: &mut VaultTableView| {
                                 view.set_selected_row(view.len() - 1);
                         })
                         .unwrap();
                 })
                 .on_event('K', |siv| {
-                        siv.call_on_id("password_table", |view: &mut VaultTableView| {
+                        siv.call_on_name("password_table", |view: &mut VaultTableView| {
                                 view.set_selected_row(0);
                         })
                         .unwrap();
                 })
                 .on_event(Event::CtrlChar('u'), |siv| {
-                        siv.call_on_id("password_table", |view: &mut VaultTableView| {
+                        siv.call_on_name("password_table", |view: &mut VaultTableView| {
                                 if let Some(row) = view.item() {
                                         if let Some(entry) = view.borrow_item(row) {
                                                 let mut clipboard: ClipboardContext = ClipboardProvider::new()
@@ -139,7 +139,7 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
                         .unwrap();
                 })
                 .on_event(Event::CtrlChar('p'), |siv| {
-                        siv.call_on_id("password_table", |view: &mut VaultTableView| {
+                        siv.call_on_name("password_table", |view: &mut VaultTableView| {
                                 if let Some(row) = view.item() {
                                         if let Some(entry) = view.borrow_item(row) {
                                                 let mut clipboard: ClipboardContext = ClipboardProvider::new()
@@ -154,7 +154,7 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
                         .unwrap();
                 })
                 .on_event(Event::CtrlChar('f'), |siv| {
-                        siv.focus_id("search_field").unwrap();
+                        siv.focus_name("search_field").unwrap();
                 });
 
         let search_field =
@@ -162,7 +162,7 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
                         .on_edit(move |siv, content, _| {
                                 fuzzy_match_on_edit(siv, &items, content);
                         })
-                        .with_id("search_field")
+                        .with_name("search_field")
                         .full_width();
 
         let search_view = LinearLayout::horizontal()
@@ -170,16 +170,16 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
                 .child(
                         OnEventView::new(search_field)
                                 .on_event(Event::CtrlChar('f'), |siv| {
-                                        siv.focus_id("password_table").unwrap();
+                                        siv.focus_name("password_table").unwrap();
                                 })
                                 .on_event(Key::Esc, |siv| {
-                                        siv.focus_id("password_table").unwrap();
+                                        siv.focus_name("password_table").unwrap();
                                 })
                                 .on_event(Key::Enter, |siv| {
-                                        siv.focus_id("password_table").unwrap();
+                                        siv.focus_name("password_table").unwrap();
                                 })
                                 .on_event(Event::CtrlChar('u'), |siv| {
-                                        if let Some(mut view) = siv.find_id::<EditView>("search_field") {
+                                        if let Some(mut view) = siv.find_name::<EditView>("search_field") {
                                                 view.set_content("")(siv);
                                         }
                                 })
@@ -203,12 +203,12 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
                 );
 
         siv.add_layer(layout);
-        siv.focus_id("password_table").unwrap();
+        siv.focus_name("password_table").unwrap();
 }
 
 
 fn fuzzy_match_on_edit(siv: &mut Cursive, items: &Vec<VaultEntry>, content: &str) {
-        let mut table = siv.find_id::<VaultTableView>("password_table").unwrap();
+        let mut table = siv.find_name::<VaultTableView>("password_table").unwrap();
 
         // If no search term is present, sort by name and favorite by default
         if content.len() == 0 {
