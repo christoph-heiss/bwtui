@@ -11,7 +11,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Visitor;
 use sha2::Sha256;
 
-
 #[derive(Debug, Default)]
 pub struct CipherSuite {
         master_key: Vec<u8>,
@@ -63,7 +62,6 @@ impl CipherSuite {
         }
 }
 
-
 fn derive_master_key(email: &str, password: &str, iter_count: usize) -> (Vec<u8>, String, Vec<u8>) {
         let mut master_key = vec![0u8; 32];
         pbkdf2::<Hmac<Sha256>>(
@@ -85,7 +83,6 @@ fn derive_master_key(email: &str, password: &str, iter_count: usize) -> (Vec<u8>
         (master_key, base64::encode(&master_key_hash), mac_key)
 }
 
-
 #[derive(Clone, Debug)]
 pub struct CipherString {
         type_: usize,
@@ -94,7 +91,6 @@ pub struct CipherString {
         ct: Vec<u8>,
         mac: Vec<u8>,
 }
-
 
 impl CipherString {
         fn from_str(text: &str) -> Option<CipherString> {
@@ -158,7 +154,6 @@ impl CipherString {
                         .and_then(|s| String::from_utf8(s).ok())
         }
 }
-
 
 struct CipherStringVisitor;
 

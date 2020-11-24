@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: MIT
 
 use std::cmp::Ordering;
+use std::fs::{self, File};
+use std::io::{BufWriter, BufReader};
+use std::path::PathBuf;
 
-use clipboard::ClipboardProvider;
 use clipboard::ClipboardContext;
-
-use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
-
+use clipboard::ClipboardProvider;
 use cursive::Cursive;
 use cursive::event::{Event, Key};
 use cursive::traits::*;
 use cursive::views::{Dialog, DummyView, EditView, LinearLayout, OnEventView, TextView};
 use cursive_table_view::{TableView, TableViewItem};
-
+use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use unicase::UniCase;
 
-use crate::api::{AuthData, CipherEntry, VaultData};
-use crate::cipher::CipherSuite;
-
+use bitwarden::{ApiError, AppData, AuthData, CipherEntry, VaultData};
+use bitwarden::cipher::CipherSuite;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum VaultColumn {
@@ -35,7 +36,6 @@ struct VaultEntry {
 }
 
 type VaultTableView = TableView::<VaultEntry, VaultColumn>;
-
 
 impl VaultEntry {
         fn from_cipher_entry(entry: &CipherEntry, cipher: &CipherSuite) -> Option<VaultEntry> {
@@ -69,7 +69,6 @@ impl TableViewItem<VaultColumn> for VaultEntry {
                 }
         }
 }
-
 
 pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
         let items = vault_data.ciphers
@@ -206,7 +205,6 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
         siv.focus_name("password_table").unwrap();
 }
 
-
 fn fuzzy_match_on_edit(siv: &mut Cursive, items: &Vec<VaultEntry>, content: &str) {
         let mut table = siv.find_name::<VaultTableView>("password_table").unwrap();
 
@@ -240,4 +238,63 @@ fn fuzzy_match_on_edit(siv: &mut Cursive, items: &Vec<VaultEntry>, content: &str
 
         table.set_selected_row(0);
         table.set_items(items);
+}
+
+fn get_app_data_path() -> Result<PathBuf, String> {
+        let project_dirs = directories::ProjectDirs::from("", "", "bwtui")
+                .ok_or("could not retrieve data directory path")?;
+
+        let target_dir = project_dirs.data_local_dir();
+
+        fs::create_dir_all(target_dir)
+                .map_err(|_| "could not create data directory")?;
+
+        let mut path = PathBuf::new();
+        path.push(target_dir);
+
+        Ok(path)
+}
+
+fn save_data_to<T>(filename: &str, data: &T) -> Result<(), ApiError>
+        where T: Serialize
+{
+        let mut path = get_app_data_path()
+                .map_err(|error| ApiError::VaultDataWriteFailed { error })?;
+        path.push(filename);
+
+        let file = File::create(path)
+                .map_err(|e| ApiError::VaultDataWriteFailed { error: e.to_string() })?;
+
+        let writer = BufWriter::new(file);
+        serde_json::to_writer(writer, data)
+                .map_err(|e| ApiError::VaultDataWriteFailed { error: e.to_string() })
+}
+
+fn read_data_from<T>(filename: &str) -> Result<T, ApiError>
+        where T: DeserializeOwned
+{
+        let mut path = get_app_data_path()
+                .map_err(|error| ApiError::VaultDataReadFailed { error })?;
+        path.push(filename);
+
+        let file = File::open(path)
+                .map_err(|e| ApiError::VaultDataReadFailed { error: e.to_string() })?;
+
+        let reader = BufReader::new(file);
+        serde_json::from_reader(reader)
+                .map_err(|e| ApiError::VaultDataReadFailed { error: e.to_string() })
+}
+
+pub fn read_app_data() -> Result<AppData, ApiError> {
+        let auth = read_data_from("auth.json")?;
+        let vault = read_data_from("vault.json")?;
+
+        Ok(AppData { auth, vault })
+}
+
+pub fn save_app_data(auth: &AuthData, vault: &VaultData) -> Result<(), ApiError> {
+        save_data_to("auth.json", auth)?;
+        save_data_to("vault.json", vault)?;
+
+        Ok(())
 }

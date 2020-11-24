@@ -6,10 +6,10 @@ use cursive::event::Event;
 use cursive::traits::*;
 use cursive::views::{Dialog, EditView, LinearLayout, OnEventView, TextView};
 
-use crate::api::{self, ApiError, AppData, AuthData, VaultData};
-use crate::cipher::CipherSuite;
-use crate::vault;
+use bitwarden::{self, ApiError, AppData, AuthData, VaultData};
+use bitwarden::cipher::CipherSuite;
 
+use crate::vault;
 
 pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
         let email_edit = EditView::new()
@@ -69,7 +69,6 @@ pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
         }
 }
 
-
 fn check_master_password(siv: &mut Cursive, email: String, master_password: &str) {
         if let Some(app_data) = siv.take_user_data::<AppData>() {
                 let AppData { mut auth, vault } = app_data;
@@ -85,7 +84,7 @@ fn check_master_password(siv: &mut Cursive, email: String, master_password: &str
                 return;
         }
 
-        let auth_data = api::authenticate(&email, &master_password);
+        let auth_data = bitwarden::authenticate(&email, &master_password);
 
         match auth_data {
                 Ok(mut auth_data) => {
@@ -105,11 +104,10 @@ fn check_master_password(siv: &mut Cursive, email: String, master_password: &str
         }
 }
 
-
 fn sync_vault_data(siv: &mut Cursive, auth_data: &AuthData) -> Result<VaultData, ApiError> {
-        match api::sync(&auth_data) {
+        match bitwarden::sync(&auth_data) {
                 Ok(vault_data) => {
-                        if let Err(err) = api::save_app_data(&auth_data, &vault_data) {
+                        if let Err(err) = vault::save_app_data(&auth_data, &vault_data) {
                                 siv.add_layer(Dialog::info(err.to_string()));
                         }
 

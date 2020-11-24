@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: MIT
 
-use cursive::backend::termion::Backend;
 use cursive::Cursive;
+use cursive::backends::termion::Backend;
 use cursive_buffered_backend::BufferedBackend;
 
-mod api;
-mod cipher;
 mod login;
 mod vault;
-
 
 fn main() {
         // We need to use a buffered backend due to flickering with termion.
@@ -20,7 +17,7 @@ fn main() {
         });
 
         let mut email = None;
-        if let Ok(data) = api::read_app_data() {
+        if let Ok(data) = vault::read_app_data() {
                 email = Some(data.vault.profile.email.clone());
                 siv.set_user_data(data);
         }

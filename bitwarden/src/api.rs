@@ -1,22 +1,16 @@
 // SPDX-License-Identifier: MIT
 
 use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::{BufWriter, BufReader};
-use std::path::{PathBuf};
 
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-use serde::de::DeserializeOwned;
+use uuid::Uuid;
 
 use crate::cipher::{CipherSuite, CipherString};
 
-
 const AUTH_URL: &str = "https://identity.bitwarden.com/connect/token";
 const BASE_URL: &str = "https://api.bitwarden.com";
-
 
 #[derive(Debug, failure::Fail)]
 pub enum ApiError {
@@ -348,68 +342,4 @@ pub fn sync(auth_data: &AuthData) -> Result<VaultData, ApiError> {
                         error: format!("{:?}", response.status())
                 })
         }
-}
-
-
-fn get_app_data_path() -> Result<PathBuf, String> {
-        let project_dirs = directories::ProjectDirs::from("", "", "bwtui")
-                .ok_or("could not retrieve data directory path")?;
-
-        let target_dir = project_dirs.data_local_dir();
-
-        fs::create_dir_all(target_dir)
-                .map_err(|_| "could not create data directory")?;
-
-        let mut path = PathBuf::new();
-        path.push(target_dir);
-
-        Ok(path)
-}
-
-
-fn save_data_to<T>(filename: &str, data: &T) -> Result<(), ApiError>
-        where T: Serialize
-{
-        let mut path = get_app_data_path()
-                .map_err(|error| ApiError::VaultDataWriteFailed { error })?;
-        path.push(filename);
-
-        let file = File::create(path)
-                .map_err(|e| ApiError::VaultDataWriteFailed { error: e.to_string() })?;
-
-        let writer = BufWriter::new(file);
-        serde_json::to_writer(writer, data)
-                .map_err(|e| ApiError::VaultDataWriteFailed { error: e.to_string() })
-}
-
-
-fn read_data_from<T>(filename: &str) -> Result<T, ApiError>
-        where T: DeserializeOwned
-{
-        let mut path = get_app_data_path()
-                .map_err(|error| ApiError::VaultDataReadFailed { error })?;
-        path.push(filename);
-
-        let file = File::open(path)
-                .map_err(|e| ApiError::VaultDataReadFailed { error: e.to_string() })?;
-
-        let reader = BufReader::new(file);
-        serde_json::from_reader(reader)
-                .map_err(|e| ApiError::VaultDataReadFailed { error: e.to_string() })
-}
-
-
-pub fn read_app_data() -> Result<AppData, ApiError> {
-        let auth = read_data_from("auth.json")?;
-        let vault = read_data_from("vault.json")?;
-
-        Ok(AppData { auth, vault })
-}
-
-
-pub fn save_app_data(auth: &AuthData, vault: &VaultData) -> Result<(), ApiError> {
-        save_data_to("auth.json", auth)?;
-        save_data_to("vault.json", vault)?;
-
-        Ok(())
 }

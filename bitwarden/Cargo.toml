@@ -1,0 +1,32 @@
+[package]
+name = "bitwarden"
+version = "0.1.0"
+authors = ["Christoph Heiss <me@christoph-heiss.me>"]
+edition = "2018"
+
+[dependencies]
+aes = "0.3.2"
+base64 = "0.12.1"
+block-modes = "0.3.3"
+failure = "0.1.8"
+hkdf = "0.8.0"
+hmac = "0.7.1"
+pbkdf2 = "0.3.0"
+sha2 = "0.8.2"
+
+[dependencies.chrono]
+version = "0.4.11"
+features = ["serde"]
+
+[dependencies.reqwest]
+version = "0.10.6"
+features = ["blocking", "json"]
+
+[dependencies.serde]
+version = "1.0.111"
+features = ["derive"]
+
+[dependencies.uuid]
+version = "0.8.1"
+features = ["v4", "serde"]
+
