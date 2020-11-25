@@ -192,7 +192,7 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
         )
         .child(
             LinearLayout::horizontal()
-                .child(TextView::new("^U: Copy username  ^P: Copy password").full_width())
+                .child(TextView::new("^C: Quit  ^U: Copy username  ^P: Copy password").full_width())
                 .child(TextView::new("^F: fuzzy-search")),
         );
 
