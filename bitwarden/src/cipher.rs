@@ -77,10 +77,10 @@ fn derive_master_key(email: &str, password: &str, iter_count: u32) -> (Vec<u8>, 
 
     // Expand master key
     let hkdf = Hkdf::<Sha256>::from_prk(&master_key).unwrap();
-    hkdf.expand("enc".as_bytes(), &mut master_key).unwrap();
+    hkdf.expand(b"enc", &mut master_key).unwrap();
 
     let mut mac_key = vec![0u8; 32];
-    hkdf.expand("mac".as_bytes(), &mut mac_key).unwrap();
+    hkdf.expand(b"mac", &mut mac_key).unwrap();
 
     (master_key, base64::encode(&master_key_hash), mac_key)
 }
@@ -168,7 +168,7 @@ impl<'de> Visitor<'de> for CipherStringVisitor {
     }
 
     fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<CipherString, E> {
-        CipherString::from_str(value).ok_or(E::custom("invalid cipher string"))
+        CipherString::from_str(value).ok_or_else(|| E::custom("invalid cipher string"))
     }
 }
 

@@ -200,12 +200,12 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
     siv.focus_name("password_table").unwrap();
 }
 
-fn fuzzy_match_on_edit(siv: &mut Cursive, items: &Vec<VaultEntry>, content: &str) {
+fn fuzzy_match_on_edit(siv: &mut Cursive, items: &[VaultEntry], content: &str) {
     let mut table = siv.find_name::<VaultTableView>("password_table").unwrap();
 
     // If no search term is present, sort by name and favorite by default
-    if content.len() == 0 {
-        table.set_items(items.clone());
+    if content.is_empty() {
+        table.set_items(items.to_vec());
 
         table.sort_by(VaultColumn::Name, Ordering::Less);
         table.sort_by(VaultColumn::Favorite, Ordering::Less);
@@ -251,7 +251,7 @@ where
     T: Serialize,
 {
     let mut path = get_app_data_path()
-        .map_err(|error| ApiError::VaultDataWriteFailed(error))?;
+        .map_err(ApiError::VaultDataWriteFailed)?;
 
     path.push(filename);
 
@@ -268,7 +268,7 @@ where
     T: DeserializeOwned,
 {
     let mut path = get_app_data_path()
-        .map_err(|e| ApiError::VaultDataReadFailed(e))?;
+        .map_err(ApiError::VaultDataReadFailed)?;
 
     path.push(filename);
 

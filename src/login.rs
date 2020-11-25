@@ -13,7 +13,7 @@ use crate::vault;
 
 pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
     let email_edit = EditView::new()
-        .content(default_email.clone().unwrap_or("".to_owned()))
+        .content(default_email.clone().unwrap_or_else(|| "".to_owned()))
         .with_name("email");
 
     let email_view = OnEventView::new(email_edit).on_event(Event::CtrlChar('u'), |siv| {
@@ -65,7 +65,7 @@ fn check_master_password(siv: &mut Cursive, email: String, master_password: &str
 
         auth.cipher = CipherSuite::from(&email, master_password, auth.kdf_iterations);
 
-        if let Err(_) = auth.cipher.set_decrypt_key(&vault.profile.key) {
+        if auth.cipher.set_decrypt_key(&vault.profile.key).is_err() {
             siv.add_layer(Dialog::info("Wrong vault password"));
         } else {
             vault::show(siv, auth, vault);
@@ -82,7 +82,7 @@ fn check_master_password(siv: &mut Cursive, email: String, master_password: &str
 
             let vault = sync_vault_data(siv, &auth_data).unwrap();
 
-            if let Err(_) = auth_data.cipher.set_decrypt_key(&vault.profile.key) {
+            if auth_data.cipher.set_decrypt_key(&vault.profile.key).is_err() {
                 siv.add_layer(Dialog::info("Wrong vault password"));
             } else {
                 vault::show(siv, auth_data, vault);
