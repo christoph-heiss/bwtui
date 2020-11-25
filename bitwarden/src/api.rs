@@ -43,8 +43,8 @@ pub struct AuthData {
         expires_in: usize,
         token_type: String,
 
-        kdf: usize,
-        pub kdf_iterations: usize,
+        kdf: u32,
+        pub kdf_iterations: u32,
 
         #[serde(skip)]
         pub cipher: CipherSuite,
@@ -54,9 +54,9 @@ pub struct AuthData {
 #[derive(Debug, Deserialize)]
 struct PreloginResponseData {
         #[serde(alias = "Kdf")]
-        kdf: usize,
+        kdf: u32,
         #[serde(alias = "KdfIterations")]
-        kdf_iterations: usize,
+        kdf_iterations: u32,
 }
 
 

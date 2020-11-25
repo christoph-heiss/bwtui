@@ -5,7 +5,7 @@ use std::fmt;
 use aes::Aes256;
 use block_modes::{Cbc, BlockMode, block_padding::Pkcs7};
 use hkdf::Hkdf;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, Mac, NewMac};
 use pbkdf2::pbkdf2;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Visitor;
@@ -39,7 +39,7 @@ pub enum CipherError {
 }
 
 impl CipherSuite {
-        pub fn from(email: &str, password: &str, kdf_iterations: usize) -> Self {
+        pub fn from(email: &str, password: &str, kdf_iterations: u32) -> Self {
                 let (master_key, master_key_hash, mac_key) =
                         derive_master_key(email, password, kdf_iterations);
 
@@ -62,7 +62,7 @@ impl CipherSuite {
         }
 }
 
-fn derive_master_key(email: &str, password: &str, iter_count: usize) -> (Vec<u8>, String, Vec<u8>) {
+fn derive_master_key(email: &str, password: &str, iter_count: u32) -> (Vec<u8>, String, Vec<u8>) {
         let mut master_key = vec![0u8; 32];
         pbkdf2::<Hmac<Sha256>>(
                 password.as_bytes(), email.as_bytes(), iter_count, &mut master_key
@@ -125,7 +125,7 @@ impl CipherString {
                 message.extend(&self.ct);
 
                 let mut mac = Hmac::<Sha256>::new_varkey(mac_key).unwrap();
-                mac.input(&message);
+                mac.update(&message);
 
                 mac.verify(&self.mac).is_ok()
         }
