@@ -1,33 +1,38 @@
 // SPDX-License-Identifier: MIT
 
+use std::sync::mpsc;
+use std::thread;
+
 use cursive::direction::Orientation;
 use cursive::event::Event;
 use cursive::traits::*;
-use cursive::views::{Dialog, EditView, LinearLayout, OnEventView, TextView};
-use cursive::Cursive;
+use cursive::views::{Dialog, EditView, LinearLayout, OnEventView, TextContent, TextView};
+use cursive::{CbSink as CursiveSink, Cursive};
 
 use bitwarden::cipher::CipherSuite;
-use bitwarden::{self, ApiError, AppData, AuthData, VaultData};
+use bitwarden::{self, ApiError, AuthData};
 
-use crate::vault;
+use crate::vault::{self, VaultData};
 
-pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
-    let email_edit = EditView::new()
-        .content(default_email.clone().unwrap_or_else(|| "".to_owned()))
-        .with_name("email");
+enum LoginProgress {
+    Decrypting,
+    Syncing,
+    Finished(VaultData),
+    Error(Option<VaultData>, ApiError),
+}
 
+type LoginProgressSink = mpsc::Sender<LoginProgress>;
+type LoginProgressRecv = mpsc::Receiver<LoginProgress>;
+
+pub fn create(siv: &mut Cursive) {
+    let email_edit = EditView::new().with_name("email");
     let email_view = OnEventView::new(email_edit).on_event(Event::CtrlChar('u'), |siv| {
-        if let Some(mut view) = siv.find_name::<EditView>("email") {
-            view.set_content("")(siv);
-        }
+        siv.find_name::<EditView>("email").unwrap().set_content("")(siv);
     });
 
     let password_edit = EditView::new().secret().with_name("master_password");
-
     let password_view = OnEventView::new(password_edit).on_event(Event::CtrlChar('u'), |siv| {
-        if let Some(mut view) = siv.find_name::<EditView>("master_password") {
-            view.set_content("")(siv);
-        }
+        siv.find_name::<EditView>("master_password").unwrap().set_content("")(siv);
     });
 
     let layout = LinearLayout::new(Orientation::Vertical)
@@ -36,74 +41,120 @@ pub fn ask(siv: &mut Cursive, default_email: Option<String>) {
         .child(TextView::new("master password:"))
         .child(password_view);
 
-    siv.add_layer(
-        Dialog::around(layout)
-            .title("bitwarden vault login")
-            .button("Ok", |siv| {
-                let email = siv
-                    .call_on_name("email", |view: &mut EditView| view.get_content())
-                    .unwrap()
-                    .to_string();
+    let dialog = Dialog::around(layout)
+        .title("bitwarden vault login")
+        .button("Ok", on_login)
+        .min_width(60);
 
-                let password = siv
-                    .call_on_name("master_password", |view: &mut EditView| view.get_content())
-                    .unwrap();
+    siv.clear();
+    siv.add_layer(dialog);
 
-                check_master_password(siv, email, &password);
-            })
-            .min_width(60),
-    );
-
-    if default_email.is_some() {
+    if let Some(email) = siv.user_data().map(|data: &mut VaultData| data.sync.profile.email.clone()) {
+        siv.find_name::<EditView>("email").unwrap().set_content(email)(siv);
         siv.focus_name("master_password").unwrap();
     }
 }
 
-fn check_master_password(siv: &mut Cursive, email: String, master_password: &str) {
-    if let Some(app_data) = siv.take_user_data::<AppData>() {
-        let AppData { mut auth, vault } = app_data;
+fn on_login(siv: &mut Cursive) {
+    let email = siv.find_name::<EditView>("email").unwrap().get_content().to_string();
+    let password = siv.find_name::<EditView>("master_password").unwrap().get_content().to_string();
 
-        auth.cipher = CipherSuite::from(&email, master_password, auth.kdf_iterations);
+    siv.set_autorefresh(true);
+    let progress_text = TextContent::new("authenticating ...");
+    let progress_view = TextView::new_with_content(progress_text.clone());
+    let progress_dialog = Dialog::around(progress_view).with_name("progress_dialog");
+    siv.add_layer(progress_dialog);
 
-        if auth.cipher.set_decrypt_key(&vault.profile.key).is_err() {
-            siv.add_layer(Dialog::info("Wrong vault password"));
+    let vault_data = siv.take_user_data();
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        if let Some(data) = vault_data {
+            decrypt_cached(tx, data, &email, &password);
         } else {
-            vault::show(siv, auth, vault);
+            sync_and_decrypt(tx, &email, &password);
         }
+    });
 
-        return;
-    }
+    let cb_sink = siv.cb_sink().clone();
+    thread::spawn(move || {
+        process_login(cb_sink, rx, progress_text);
+    });
+}
 
-    let auth_data = bitwarden::authenticate(&email, &master_password);
+fn decrypt_cached(
+    sink: LoginProgressSink,
+    mut vault: VaultData,
+    email: &str,
+    master_password: &str
+) {
+    sink.send(LoginProgress::Decrypting).unwrap();
+    vault.auth.cipher = CipherSuite::from(&email, master_password, vault.auth.kdf_iterations);
 
-    match auth_data {
-        Ok(mut auth_data) => {
-            siv.pop_layer();
-
-            let vault = sync_vault_data(siv, &auth_data).unwrap();
-
-            if auth_data.cipher.set_decrypt_key(&vault.profile.key).is_err() {
-                siv.add_layer(Dialog::info("Wrong vault password"));
-            } else {
-                vault::show(siv, auth_data, vault);
-            }
-        }
-        Err(_) => siv.add_layer(Dialog::info("Wrong vault password")),
+    if vault.auth.cipher.set_decrypt_key(&vault.sync.profile.key).is_err() {
+        sink.send(
+            LoginProgress::Error(Some(vault), ApiError::LoginFailed)
+        ).unwrap();
+    } else {
+        vault::decrypt(&mut vault);
+        sink.send(LoginProgress::Finished(vault)).unwrap();
     }
 }
 
-fn sync_vault_data(siv: &mut Cursive, auth_data: &AuthData) -> Result<VaultData, ApiError> {
-    match bitwarden::sync(&auth_data) {
-        Ok(vault_data) => {
-            if let Err(err) = vault::save_app_data(&auth_data, &vault_data) {
-                siv.add_layer(Dialog::info(err.to_string()));
-            }
+fn sync_and_decrypt(sink: LoginProgressSink, email: &str, master_password: &str) {
+    match bitwarden::authenticate(&email, &master_password) {
+        Ok(auth) => {
+            sink.send(LoginProgress::Syncing).unwrap();
+            let vault = sync_vault_data(auth).unwrap();
 
-            Ok(vault_data)
-        }
-        Err(err) => {
-            siv.add_layer(Dialog::info(err.to_string()));
-            Err(err)
+            decrypt_cached(sink, vault, email, master_password);
+        },
+        Err(err) => sink.send(LoginProgress::Error(None, err)).unwrap(),
+    }
+}
+
+fn process_login(sink: CursiveSink, recv: LoginProgressRecv, progress_text: TextContent) {
+    for progress in recv.iter() {
+        match progress {
+            LoginProgress::Decrypting => {
+                progress_text.set_content("decrypting ...");
+             },
+
+            LoginProgress::Syncing => {
+                progress_text.set_content("syncing ...");
+            },
+
+            LoginProgress::Finished(vault) => {
+                sink.send(Box::new(|siv| {
+                    siv.set_user_data(vault);
+                    vault::create(siv);
+                })).unwrap();
+                break;
+            },
+
+            LoginProgress::Error(vault, err) => {
+                sink.send(Box::new(move |siv| {
+                    siv.pop_layer();
+                    siv.find_name::<EditView>("master_password").unwrap().set_content("")(siv);
+
+                    if let Some(vault) = vault {
+                        siv.set_user_data(vault);
+                    }
+
+                    siv.add_layer(Dialog::info(err.to_string()));
+                })).unwrap();
+                break;
+            },
         }
     }
+
+    sink.send(Box::new(|siv| {
+        siv.set_autorefresh(false);
+    })).unwrap();
+}
+
+fn sync_vault_data(auth: AuthData) -> Result<VaultData, String> {
+    bitwarden::sync(&auth)
+        .map(|sync| VaultData { auth, sync, decrypted: Vec::new() })
+        .map_err(|e| e.to_string())
+        .and_then(|vault| vault::save_local_data(&vault).and(Ok(vault)))
 }

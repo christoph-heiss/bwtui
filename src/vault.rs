@@ -18,7 +18,7 @@ use serde::Serialize;
 use unicase::UniCase;
 
 use bitwarden::cipher::CipherSuite;
-use bitwarden::{ApiError, AppData, AuthData, CipherEntry, VaultData};
+use bitwarden::{AuthData, CipherEntry, SyncResponse};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum VaultColumn {
@@ -27,18 +27,24 @@ enum VaultColumn {
     Username,
 }
 
-#[derive(Clone, Debug)]
-struct VaultEntry {
+#[derive(Clone)]
+pub struct VaultEntry {
     name: UniCase<String>,
     username: UniCase<String>,
     password: String,
     favorite: String,
 }
 
+pub struct VaultData {
+    pub auth: AuthData,
+    pub sync: SyncResponse,
+    pub decrypted: Vec<VaultEntry>,
+}
+
 type VaultTableView = TableView<VaultEntry, VaultColumn>;
 
 impl VaultEntry {
-    fn from_cipher_entry(entry: &CipherEntry, cipher: &CipherSuite) -> Option<VaultEntry> {
+    pub fn from_cipher_entry(entry: &CipherEntry, cipher: &CipherSuite) -> Option<VaultEntry> {
         let favorite = if entry.favorite {
             "\u{2605}"
         } else {
@@ -75,18 +81,12 @@ impl TableViewItem<VaultColumn> for VaultEntry {
     }
 }
 
-pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
-    let items = vault_data
-        .ciphers
-        .iter()
-        .map(|c| VaultEntry::from_cipher_entry(&c, &auth_data.cipher).unwrap())
-        .collect::<Vec<VaultEntry>>();
-
+pub fn create(siv: &mut Cursive) {
     let mut table = VaultTableView::new()
         .column(VaultColumn::Favorite, "", |c| c.width(1))
         .column(VaultColumn::Name, "Name", |c| c.width_percent(25))
         .column(VaultColumn::Username, "Username", |c| c)
-        .items(items.clone());
+        .items(siv.user_data::<VaultData>().unwrap().decrypted.clone());
 
     table.sort_by(VaultColumn::Name, Ordering::Less);
     table.sort_by(VaultColumn::Favorite, Ordering::Less);
@@ -154,7 +154,7 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
 
     let search_field = EditView::new()
         .on_edit(move |siv, content, _| {
-            fuzzy_match_on_edit(siv, &items, content);
+            fuzzy_match_on_edit(siv, content);
         })
         .with_name("search_field")
         .full_width();
@@ -196,27 +196,33 @@ pub fn show(siv: &mut Cursive, auth_data: AuthData, vault_data: VaultData) {
                 .child(TextView::new("^F: fuzzy-search")),
         );
 
-    siv.add_layer(layout);
+    siv.clear();
+    siv.add_fullscreen_layer(layout);
     siv.focus_name("password_table").unwrap();
 }
 
-fn fuzzy_match_on_edit(siv: &mut Cursive, items: &[VaultEntry], content: &str) {
+pub fn decrypt(vault: &mut VaultData) {
+    vault.decrypted = vault.sync
+        .ciphers
+        .iter()
+        .map(|c| VaultEntry::from_cipher_entry(&c, &vault.auth.cipher).unwrap())
+        .collect();
+}
+
+fn fuzzy_match_on_edit(siv: &mut Cursive, content: &str) {
     let mut table = siv.find_name::<VaultTableView>("password_table").unwrap();
+    let items = &siv.user_data::<VaultData>().unwrap().decrypted;
 
     // If no search term is present, sort by name and favorite by default
     if content.is_empty() {
-        table.set_items(items.to_vec());
-
+        table.set_items(items.clone());
         table.sort_by(VaultColumn::Name, Ordering::Less);
         table.sort_by(VaultColumn::Favorite, Ordering::Less);
-
         return;
     }
 
     let matcher = SkimMatcherV2::default();
-
-    let mut items: Vec<(i64, VaultEntry)> = items
-        .iter()
+    let mut items: Vec<(i64, VaultEntry)> = items.iter()
         .map(|entry| {
             (matcher.fuzzy_match(&entry.name, content), entry.clone())
         })
@@ -227,7 +233,6 @@ fn fuzzy_match_on_edit(siv: &mut Cursive, items: &[VaultEntry], content: &str) {
     items.sort_by(|a, b| a.0.cmp(&b.0).reverse());
 
     let items = items.iter().map(|(_, entry)| entry.clone()).collect();
-
     table.set_selected_row(0);
     table.set_items(items);
 }
@@ -246,50 +251,50 @@ fn get_app_data_path() -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn save_data_to<T>(filename: &str, data: &T) -> Result<(), ApiError>
+fn save_data_to<T>(filename: &str, data: &T) -> Result<(), String>
 where
     T: Serialize,
 {
     let mut path = get_app_data_path()
-        .map_err(ApiError::VaultDataWriteFailed)?;
+        .map_err(|err| format!("failed to write sync data: {}", err))?;
 
     path.push(filename);
 
     let file = File::create(path)
-        .map_err(|e| ApiError::VaultDataWriteFailed(e.to_string()))?;
+        .map_err(|err| format!("failed to write sync data: {}", err))?;
 
     let writer = BufWriter::new(file);
     serde_json::to_writer(writer, data)
-        .map_err(|e| ApiError::VaultDataWriteFailed(e.to_string()))
+        .map_err(|err| format!("failed to write sync data: {}", err))
 }
 
-fn read_data_from<T>(filename: &str) -> Result<T, ApiError>
+fn read_data_from<T>(filename: &str) -> Result<T, String>
 where
     T: DeserializeOwned,
 {
     let mut path = get_app_data_path()
-        .map_err(ApiError::VaultDataReadFailed)?;
+        .map_err(|err| format!("failed to read sync data: {}", err))?;
 
     path.push(filename);
 
     let file = File::open(path)
-        .map_err(|e| ApiError::VaultDataReadFailed(e.to_string()))?;
+        .map_err(|err| format!("failed to read sync data: {}", err))?;
 
     let reader = BufReader::new(file);
     serde_json::from_reader(reader)
-        .map_err(|e| ApiError::VaultDataReadFailed(e.to_string()))
+        .map_err(|err| format!("failed to read sync data: {}", err))
 }
 
-pub fn read_app_data() -> Result<AppData, ApiError> {
+pub fn read_local_data() -> Result<VaultData, String> {
     let auth = read_data_from("auth.json")?;
-    let vault = read_data_from("vault.json")?;
+    let sync = read_data_from("vault.json")?;
 
-    Ok(AppData { auth, vault })
+    Ok(VaultData { auth, sync, decrypted: Vec::new() })
 }
 
-pub fn save_app_data(auth: &AuthData, vault: &VaultData) -> Result<(), ApiError> {
-    save_data_to("auth.json", auth)?;
-    save_data_to("vault.json", vault)?;
+pub fn save_local_data(data: &VaultData) -> Result<(), String> {
+    save_data_to("auth.json", &data.auth)?;
+    save_data_to("vault.json", &data.sync)?;
 
     Ok(())
 }
