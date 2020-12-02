@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 
-use std::sync::mpsc;
 use std::thread;
 
 use cursive::direction::Orientation;
@@ -13,16 +12,6 @@ use bitwarden::cipher::CipherSuite;
 use bitwarden::{self, ApiError, AuthData};
 
 use crate::vault::{self, VaultData};
-
-enum LoginProgress {
-    Decrypting,
-    Syncing,
-    Finished(VaultData),
-    Error(Option<VaultData>, ApiError),
-}
-
-type LoginProgressSink = mpsc::Sender<LoginProgress>;
-type LoginProgressRecv = mpsc::Receiver<LoginProgress>;
 
 pub fn create(siv: &mut Cursive) {
     let email_edit = EditView::new().with_name("email");
@@ -66,89 +55,65 @@ fn on_login(siv: &mut Cursive) {
     siv.add_layer(progress_dialog);
 
     let vault_data = siv.take_user_data();
-    let (tx, rx) = mpsc::channel();
+    let sink = siv.cb_sink().clone();
     thread::spawn(move || {
         if let Some(data) = vault_data {
-            decrypt_cached(tx, data, &email, &password);
+            decrypt_cached(sink.clone(), progress_text, data, &email, &password);
         } else {
-            sync_and_decrypt(tx, &email, &password);
+            sync_and_decrypt(sink.clone(), progress_text, &email, &password);
         }
+
+        sink.send(Box::new(|siv| {
+            siv.set_autorefresh(false);
+        })).unwrap();
     });
 
-    let cb_sink = siv.cb_sink().clone();
-    thread::spawn(move || {
-        process_login(cb_sink, rx, progress_text);
-    });
 }
 
 fn decrypt_cached(
-    sink: LoginProgressSink,
+    sink: CursiveSink,
+    progress: TextContent,
     mut vault: VaultData,
     email: &str,
     master_password: &str
 ) {
-    sink.send(LoginProgress::Decrypting).unwrap();
+    progress.set_content("decrypting ...");
     vault.auth.cipher = CipherSuite::from(&email, master_password, vault.auth.kdf_iterations);
 
     if vault.auth.cipher.set_decrypt_key(&vault.sync.profile.key).is_err() {
-        sink.send(
-            LoginProgress::Error(Some(vault), ApiError::LoginFailed)
-        ).unwrap();
+        handle_login_error(sink, Some(vault), ApiError::LoginFailed);
     } else {
         vault::decrypt(&mut vault);
-        sink.send(LoginProgress::Finished(vault)).unwrap();
+
+        sink.send(Box::new(|siv| {
+            siv.set_user_data(vault);
+            vault::create(siv);
+        })).unwrap();
     }
 }
 
-fn sync_and_decrypt(sink: LoginProgressSink, email: &str, master_password: &str) {
+fn sync_and_decrypt(sink: CursiveSink, progress: TextContent, email: &str, master_password: &str) {
     match bitwarden::authenticate(&email, &master_password) {
         Ok(auth) => {
-            sink.send(LoginProgress::Syncing).unwrap();
+            progress.set_content("syncing ...");
             let vault = sync_vault_data(auth).unwrap();
 
-            decrypt_cached(sink, vault, email, master_password);
+            decrypt_cached(sink, progress, vault, email, master_password);
         },
-        Err(err) => sink.send(LoginProgress::Error(None, err)).unwrap(),
+        Err(err) => handle_login_error(sink, None, err),
     }
 }
 
-fn process_login(sink: CursiveSink, recv: LoginProgressRecv, progress_text: TextContent) {
-    for progress in recv.iter() {
-        match progress {
-            LoginProgress::Decrypting => {
-                progress_text.set_content("decrypting ...");
-             },
+fn handle_login_error(sink: CursiveSink, vault: Option<VaultData>, error: ApiError) {
+    sink.send(Box::new(move |siv| {
+        siv.pop_layer();
+        siv.find_name::<EditView>("master_password").unwrap().set_content("")(siv);
 
-            LoginProgress::Syncing => {
-                progress_text.set_content("syncing ...");
-            },
-
-            LoginProgress::Finished(vault) => {
-                sink.send(Box::new(|siv| {
-                    siv.set_user_data(vault);
-                    vault::create(siv);
-                })).unwrap();
-                break;
-            },
-
-            LoginProgress::Error(vault, err) => {
-                sink.send(Box::new(move |siv| {
-                    siv.pop_layer();
-                    siv.find_name::<EditView>("master_password").unwrap().set_content("")(siv);
-
-                    if let Some(vault) = vault {
-                        siv.set_user_data(vault);
-                    }
-
-                    siv.add_layer(Dialog::info(err.to_string()));
-                })).unwrap();
-                break;
-            },
+        if let Some(vault) = vault {
+            siv.set_user_data(vault);
         }
-    }
 
-    sink.send(Box::new(|siv| {
-        siv.set_autorefresh(false);
+        siv.add_layer(Dialog::info(error.to_string()));
     })).unwrap();
 }
 

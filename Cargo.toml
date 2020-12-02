@@ -17,6 +17,9 @@ fuzzy-matcher = "0.3.7"
 serde_json = "1.0.59"
 unicase = "2.6.0"
 
+[dependencies.bitwarden]
+path = "bitwarden"
+
 [dependencies.cursive]
 version = "0.15.0"
 default-features = false
@@ -28,6 +31,3 @@ git = "https://github.com/BonsaiDen/cursive_table_view.git"
 [dependencies.serde]
 version = "1.0.117"
 features = ["derive"]
-
-[dependencies.bitwarden]
-path = "bitwarden"

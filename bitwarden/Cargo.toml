@@ -29,4 +29,3 @@ features = ["derive"]
 [dependencies.uuid]
 version = "0.8.1"
 features = ["v4", "serde"]
-
