@@ -178,11 +178,6 @@ pub struct CipherEntry {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Domains {
-    // TODO
-}
-
-#[derive(Debug, Deserialize, Serialize)]
 pub struct SyncResponse {
     #[serde(alias = "Object")]
     object: String,
@@ -194,6 +189,4 @@ pub struct SyncResponse {
     pub collections: Vec<String>,
     #[serde(alias = "Ciphers")]
     pub ciphers: Vec<CipherEntry>,
-    #[serde(alias = "Domains", skip)]
-    domains: Option<Domains>,
 }
