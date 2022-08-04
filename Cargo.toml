@@ -2,7 +2,7 @@
 name = "bwtui"
 version = "0.2.0"
 authors = ["Christoph Heiss <contact@christoph-heiss.at>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 categories = ["command-line-utilities"]
 readme = "README.md"
@@ -11,21 +11,21 @@ description = "terminal-based vault browser for bitwarden"
 
 [dependencies]
 clipboard = "0.5.0"
-cursive_buffered_backend = "0.5.0"
-cursive_table_view = "0.13.3"
-directories = "3.0.1"
+cursive_buffered_backend = "0.6.0"
+cursive_table_view = "0.14.0"
+directories = "4.0.1"
 fuzzy-matcher = "0.3.7"
-serde_json = "1.0.64"
+serde_json = "1.0.83"
 unicase = "2.6.0"
 
 [dependencies.bitwarden]
 path = "bitwarden"
 
 [dependencies.cursive]
-version = "0.16.3"
+version = "0.19.0"
 default-features = false
-features = ["termion-backend"]
+features = ["crossterm-backend"]
 
 [dependencies.serde]
-version = "1.0.125"
+version = "1.0.142"
 features = ["derive"]
