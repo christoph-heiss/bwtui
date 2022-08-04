@@ -1,0 +1,51 @@
+name: Release builds
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+
+env:
+  RUSTFLAGS: -D warnings
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux-x86_64-release:
+    name: Linux release build (x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Install required system libraries
+        run: |
+          sudo apt-get update \
+          && sudo apt-get install libxcb-shape0-dev libxcb-xfixes0-dev
+
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: bwtui_linux_x86_64
+          path: target/release/bwtui
