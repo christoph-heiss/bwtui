@@ -205,7 +205,7 @@ pub fn decrypt(vault: &mut VaultData) {
     vault.decrypted = vault.sync
         .ciphers
         .iter()
-        .map(|c| VaultEntry::from_cipher_entry(&c, &vault.auth.cipher).unwrap())
+        .map(|c| VaultEntry::from_cipher_entry(c, &vault.auth.cipher).unwrap())
         .collect();
 }
 

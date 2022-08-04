@@ -78,7 +78,7 @@ fn decrypt_cached(
     master_password: &str
 ) {
     progress.set_content("decrypting ...");
-    vault.auth.cipher = CipherSuite::from(&email, master_password, vault.auth.kdf_iterations);
+    vault.auth.cipher = CipherSuite::from(email, master_password, vault.auth.kdf_iterations);
 
     if vault.auth.cipher.set_decrypt_key(&vault.sync.profile.key).is_err() {
         handle_login_error(sink, Some(vault), ApiError::LoginFailed);
@@ -93,7 +93,7 @@ fn decrypt_cached(
 }
 
 fn sync_and_decrypt(sink: CursiveSink, progress: TextContent, email: &str, master_password: &str) {
-    match bitwarden::authenticate(&email, &master_password) {
+    match bitwarden::authenticate(email, master_password) {
         Ok(auth) => {
             progress.set_content("syncing ...");
             let vault = sync_vault_data(auth).unwrap();
