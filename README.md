@@ -1,3 +1,7 @@
+# Moved to [git.sr.ht/~c8h4/bwtui](https://git.sr.ht/~c8h4/bwtui)!
+
+Old README:
+
 # bwtui
 
 Small and simple TUI (terminal user interface) for your bitwarden vault.
